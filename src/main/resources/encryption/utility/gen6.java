@@ -1,5 +1,6 @@
 package encryption.utility;
 
+import java.io.FileInputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
@@ -17,22 +18,14 @@ import java.security.cert.X509Certificate;
 import java.security.Signature;
 
 public class gen6 {
-
     private static final String CHAR_POOL =
             "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
     private static final int KEY_LENGTH = 32;
     private static final int GCM_TAG_LENGTH = 128;
     private static final int IV_LENGTH = 12;
-
-    // Update these values
-    private static final String KEYSTORE_FILE = "keystore.jks";
-    private static final String KEYSTORE_PASSWORD = "sbieis2025";
-    private static final String KEY_ALIAS = "eis2";
- // certificate path
-    private static final String PUBLIC_CERT_FILE = "public.crt";
-
-    /**
+	
+	 /**
      * Generate 32 Character AES Key
      */
     public static String generateDynamicKey() {
@@ -59,65 +52,29 @@ public class gen6 {
     /**
      * AES GCM Encrypt
      */
-    public static String encryptJsonRequest(
-            String jsonPayload,
-            String secretKey)
-            throws Exception {
-
+    public static String encryptJsonRequest(String jsonPayload,String secretKey) throws Exception {
         if (secretKey == null
                 || secretKey.length() != 32) {
-
             throw new IllegalArgumentException(
                     "Secret key must be exactly 32 characters."
             );
         }
-
-        byte[] keyBytes =
-                secretKey.getBytes(
-                        StandardCharsets.UTF_8);
-
-        SecretKeySpec secretKeySpec =
-                new SecretKeySpec(
-                        keyBytes,
-                        "AES");
-
-        byte[] iv =
-                new byte[IV_LENGTH];
-
-        System.arraycopy(
-                keyBytes,
-                0,
-                iv,
-                0,
-                IV_LENGTH);
-
-        GCMParameterSpec gcmSpec =
-                new GCMParameterSpec(
-                        GCM_TAG_LENGTH,
-                        iv);
-
-        Cipher cipher =
-                Cipher.getInstance(
-                        "AES/GCM/NoPadding");
-
+        byte[] keyBytes =secretKey.getBytes(StandardCharsets.UTF_8);
+        SecretKeySpec secretKeySpec =new SecretKeySpec(keyBytes,"AES");
+        byte[] iv =new byte[IV_LENGTH];
+        System.arraycopy(keyBytes,0,iv,0,IV_LENGTH);
+        GCMParameterSpec gcmSpec =new GCMParameterSpec(GCM_TAG_LENGTH,iv);
+        Cipher cipher =Cipher.getInstance("AES/GCM/NoPadding");
         cipher.init(
                 Cipher.ENCRYPT_MODE,
                 secretKeySpec,
                 gcmSpec);
-
         byte[] encryptedBytes =
                 cipher.doFinal(
                         jsonPayload.getBytes(
                                 StandardCharsets.UTF_8));
-
-        return Base64.getEncoder()
-                .encodeToString(
-                        encryptedBytes);
+        return Base64.getEncoder().encodeToString(encryptedBytes);
     }
-
-    /**
-     * AES GCM Decrypt
-     */
     public static String decryptJsonRequest(
             String encryptedPayload,
             String secretKey)
@@ -166,212 +123,187 @@ public class gen6 {
                 decryptedBytes,
                 StandardCharsets.UTF_8);
     }
+	public static String encryptAESKey(
+	        String aesKey,
+	        String keystoreFile,
+	        String keystorePassword,
+	        String keyAlias)
+	        throws Exception {
 
-    /**
-     * Load Public Key from Keystore
-     */
-    private static PublicKey loadPublicKey()
-            throws Exception {
+	    PublicKey publicKey =
+	            loadPublicKey(
+	                    keystoreFile,
+	                    keystorePassword,
+	                    keyAlias);
 
-        try (InputStream is =
-                     gen6.class.getClassLoader()
-                             .getResourceAsStream(
-                                     KEYSTORE_FILE)) {
+	    Cipher cipher =
+	            Cipher.getInstance(
+	                    "RSA/ECB/OAEPWithSHA-256AndMGF1Padding");
 
-            if (is == null) {
+	    cipher.init(
+	            Cipher.ENCRYPT_MODE,
+	            publicKey);
 
-                throw new RuntimeException(
-                        "Cannot find "
-                                + KEYSTORE_FILE);
-            }
+	    return Base64.getEncoder()
+	            .encodeToString(
+	                    cipher.doFinal(
+	                            aesKey.getBytes(
+	                                    StandardCharsets.UTF_8)));
+	}
+	public static String decryptAESKey(
+	        String encryptedAESKey,
+	        String keystoreFile,
+	        String keystorePassword,
+	        String keyAlias)
+	        throws Exception {
 
-            KeyStore keyStore =
-                    KeyStore.getInstance(
-                            "PKCS12");
+	    PrivateKey privateKey =
+	            loadPrivateKey(
+	                    keystoreFile,
+	                    keystorePassword,
+	                    keyAlias);
 
-            keyStore.load(
-                    is,
-                    KEYSTORE_PASSWORD.toCharArray());
+	    Cipher cipher =
+	            Cipher.getInstance(
+	                    "RSA/ECB/OAEPWithSHA-256AndMGF1Padding");
 
-            Certificate certificate =
-                    keyStore.getCertificate(
-                            KEY_ALIAS);
+	    cipher.init(
+	            Cipher.DECRYPT_MODE,
+	            privateKey);
 
-            if (certificate == null) {
+	    return new String(
+	            cipher.doFinal(
+	                    Base64.getDecoder()
+	                            .decode(encryptedAESKey)),
+	            StandardCharsets.UTF_8);
+	}
+	private static PublicKey loadPublicKey(
+	        String keystoreFile,
+	        String keystorePassword,
+	        String keyAlias)
+	        throws Exception {
 
-                throw new RuntimeException(
-                        "Certificate not found for alias: "
-                                + KEY_ALIAS);
-            }
+	    try (InputStream is =
+	                 gen6.class.getClassLoader()
+	                         .getResourceAsStream(
+	                                 keystoreFile)) {
 
-            return certificate.getPublicKey();
-        }
-    }
+	        KeyStore keyStore =
+	                KeyStore.getInstance("PKCS12");
 
-    /**
-     * Load Private Key from Keystore
-     */
-    private static PrivateKey loadPrivateKey()
-            throws Exception {
+	        keyStore.load(
+	                is,
+	                keystorePassword.toCharArray());
 
-        try (InputStream is =
-                     gen6.class.getClassLoader()
-                             .getResourceAsStream(
-                                     KEYSTORE_FILE)) {
+	        Certificate certificate =
+	                keyStore.getCertificate(keyAlias);
 
-            if (is == null) {
+	        return certificate.getPublicKey();
+	    }
+	}
+	private static PrivateKey loadPrivateKey(
+	        String keystoreFile,
+	        String keystorePassword,
+	        String keyAlias)
+	        throws Exception {
 
-                throw new RuntimeException(
-                        "Cannot find "
-                                + KEYSTORE_FILE);
-            }
+	    try (InputStream is =
+	                 gen6.class.getClassLoader()
+	                         .getResourceAsStream(
+	                                 keystoreFile)) {
 
-            KeyStore keyStore =
-                    KeyStore.getInstance(
-                            "PKCS12");
+	        KeyStore keyStore =
+	                KeyStore.getInstance("PKCS12");
 
-            keyStore.load(
-                    is,
-                    KEYSTORE_PASSWORD.toCharArray());
+	        keyStore.load(
+	                is,
+	                keystorePassword.toCharArray());
 
-            PrivateKey privateKey =
-                    (PrivateKey) keyStore.getKey(
-                            KEY_ALIAS,
-                            KEYSTORE_PASSWORD.toCharArray());
+	        return (PrivateKey)
+	                keyStore.getKey(
+	                        keyAlias,
+	                        keystorePassword.toCharArray());
+	    }
+	}
+	public static String generateDigitalSignature(
+	        String payload,
+	        String keystoreFile,
+	        String keystorePassword,
+	        String keyAlias,
+	        String publicCertPath) throws Exception {
 
-            if (privateKey == null) {
+	    PrivateKey privateKey =
+	            loadPrivateKey(
+	                    keystoreFile,
+	                    keystorePassword,
+	                    keyAlias);
 
-                throw new RuntimeException(
-                        "Private key not found for alias: "
-                                + KEY_ALIAS);
-            }
+	    Signature signature =
+	            Signature.getInstance("SHA256withRSA");
 
-            return privateKey;
-        }
-    }
+	    signature.initSign(privateKey);
 
-    /**
-     * Encrypt AES Key using RSA OAEP
-     */
-    public static String encryptAESKey(
-            String aesKey)
-            throws Exception {
+	    signature.update(
+	            payload.getBytes(StandardCharsets.UTF_8));
 
-        PublicKey publicKey =
-                loadPublicKey();
+	    return Base64.getEncoder()
+	            .encodeToString(signature.sign());
+	}
+	private static PublicKey loadPublicKeyFromCrt(String publicCertPath)
+	        throws Exception {
 
-        Cipher cipher =
-                Cipher.getInstance(
-                        "RSA/ECB/OAEPWithSHA-256AndMGF1Padding");
+	    try (InputStream is =
+	            gen6.class.getClassLoader()
+	                    .getResourceAsStream(publicCertPath)) {
 
-        cipher.init(
-                Cipher.ENCRYPT_MODE,
-                publicKey);
+	        if (is == null) {
+	            throw new RuntimeException(
+	                    "Cannot find certificate: " + publicCertPath);
+	        }
 
-        byte[] encryptedKey =
-                cipher.doFinal(
-                        aesKey.getBytes(
-                                StandardCharsets.UTF_8));
+	        CertificateFactory factory =
+	                CertificateFactory.getInstance("X.509");
 
-        return Base64.getEncoder()
-                .encodeToString(
-                        encryptedKey);
-    }
+	        X509Certificate certificate =
+	                (X509Certificate) factory.generateCertificate(is);
 
-    /**
-     * Decrypt AES Key using RSA OAEP
-     */
-    public static String decryptAESKey(
-            String encryptedAESKey)
-            throws Exception {
+	        return certificate.getPublicKey();
+	    }
+	}
+	public static boolean verifyDigitalSignature(
+	        String payload,
+	        String signatureString,
+	        String publicCertPath) throws Exception {
 
-        PrivateKey privateKey =
-                loadPrivateKey();
+	    PublicKey publicKey =
+	            loadPublicKeyFromCrt(publicCertPath);
 
-        Cipher cipher =
-                Cipher.getInstance(
-                        "RSA/ECB/OAEPWithSHA-256AndMGF1Padding");
+	    Signature signature =
+	            Signature.getInstance("SHA256withRSA");
 
-        cipher.init(
-                Cipher.DECRYPT_MODE,
-                privateKey);
+	    signature.initVerify(publicKey);
 
-        byte[] decryptedBytes =
-                cipher.doFinal(
-                        Base64.getDecoder()
-                                .decode(
-                                        encryptedAESKey));
+	    signature.update(
+	            payload.getBytes(StandardCharsets.UTF_8));
 
-        return new String(
-                decryptedBytes,
-                StandardCharsets.UTF_8);
-    }
-    /**
-     * Load Public Key from X.509 Certificate (.crt)
-     */
-    private static PublicKey loadPublicKeyFromCrt() throws Exception {
-        
-        try (InputStream is = 
-                     gen6.class.getClassLoader()
-                             .getResourceAsStream(PUBLIC_CERT_FILE)) {
-            
-            if (is == null) {
-                throw new RuntimeException("Cannot find" + PUBLIC_CERT_FILE	);
-            }
-            
-            CertificateFactory fact = 
-                    CertificateFactory.getInstance("X.509");
-            
-            X509Certificate cer = 
-                    (X509Certificate) fact.generateCertificate(is);
-            return cer.getPublicKey();
-        }
-    }
-    /**
-     * Generate Digital Signature using SHA-256 and RSA
-     */
-    public static String generateDigitalSignature(String payload) throws Exception {
-        
-        // Signatures must be generated with the PRIVATE key
-        PrivateKey privateKey = loadPrivateKey();
-        
-        Signature signature = Signature.getInstance("SHA256withRSA");
-        signature.initSign(privateKey);
-        
-        signature.update(payload.getBytes(StandardCharsets.UTF_8));
-        
-        byte[] signedBytes = signature.sign();
-        
-        return Base64.getEncoder().encodeToString(signedBytes);
-    }
-    /**
-     * Verify Digital Signature using X.509 Certificate Public Key
-     */
-    public static boolean verifyDigitalSignature(
-            String payload, 
-            String signatureString) throws Exception {
-        
-        // Signatures are verified with the PUBLIC key from the .crt
-        PublicKey publicKey = loadPublicKeyFromCrt();
-        
-        Signature signature = Signature.getInstance("SHA256withRSA");
-        signature.initVerify(publicKey);
-        
-        signature.update(payload.getBytes(StandardCharsets.UTF_8));
-        
-        byte[] signatureBytes = Base64.getDecoder().decode(signatureString);
-        
-        return signature.verify(signatureBytes);
-    }
+	    return signature.verify(
+	            Base64.getDecoder().decode(signatureString));
+	}
+	public static void main(String[] args) {
 
-    public static void main(String[] args) {
+	    try {
+	    	String keystoreFile = "keystore.jks";
+	    	String keystorePassword = "sbieis2025";
+	        String keyAlias = "eis2";
+	     // certificate path
+	     String publicCertPath = "public.crt";
 
-        try {
-
-            String secretKey =
+	    	String secretKey =
                     generateDynamicKey();
-
-            String jsonPayload =
+	    	 System.out.println(
+	                    "Original AES Key:\n"
+	                            + secretKey);
+	    	String jsonPayload =
                     "{"
                             + "\"customerId\":\"12345\","
                             + "\"name\":\"John Doe\","
@@ -383,50 +315,48 @@ public class gen6 {
                     encryptJsonRequest(
                             jsonPayload,
                             secretKey);
-
+            System.out.println(
+                    "\nEncrypted Payload:\n"
+                            + encryptedPayload);
             String decryptedPayload =
                     decryptJsonRequest(
                             encryptedPayload,
                             secretKey);
-
-            String encryptedAESKey =
-                    encryptAESKey(
-                            secretKey);
-
-            String decryptedAESKey =
-                    decryptAESKey(
-                            encryptedAESKey);
-
-            System.out.println(
-                    "Original AES Key:\n"
-                            + secretKey);
-
-            System.out.println(
-                    "\nEncrypted AES Key:\n"
-                            + encryptedAESKey);
-
-            System.out.println(
-                    "\nDecrypted AES Key:\n"
-                            + decryptedAESKey);
-
-            System.out.println(
-                    "\nEncrypted Payload:\n"
-                            + encryptedPayload);
-
             System.out.println(
                     "\nDecrypted Payload:\n"
                             + decryptedPayload);
-         // --- Digital Signature Testing ---
-            String digitalSignature = generateDigitalSignature(jsonPayload);
-            
-            boolean isSignatureValid = verifyDigitalSignature(jsonPayload, digitalSignature);
-            
-            System.out.println("\nGenerated Digital Signature:\n" + digitalSignature);
-            System.out.println("\nIs Signature Valid? " + isSignatureValid);
+	        String encryptedAESKey =
+	                encryptAESKey(
+	                        secretKey,
+	                        keystoreFile,
+	                        keystorePassword,
+	                        keyAlias);
 
-        } catch (Exception e) {
+	        String decryptedAESKey =
+	                decryptAESKey(
+	                        encryptedAESKey,
+	                        keystoreFile,
+	                        keystorePassword,
+	                        keyAlias);
 
-            e.printStackTrace();
-        }
-    }
+	        System.out.println("\nEncrypted AES Key:\n " + encryptedAESKey);
+	        System.out.println("\nDecrypted AES Key: \n" + decryptedAESKey);
+	        String digitalSignature =
+	                generateDigitalSignature(
+	                        jsonPayload,
+	                        keystoreFile,
+	                        keystorePassword,
+	                        keyAlias,
+	                        publicCertPath);
+
+	        boolean valid =
+	                verifyDigitalSignature(
+	                        jsonPayload,
+	                        digitalSignature,
+	                        publicCertPath);
+	        System.out.println("\nVailidate Digisign: \n" + valid);
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	    }
+	}
 }
